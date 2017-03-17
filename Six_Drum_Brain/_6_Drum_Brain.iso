@@ -21,19 +21,6 @@ uint8_t keyList[128]; // fast way to assign keys to outputs, just index on the k
                       // sloppy code: assumed (correctly?) that it would be initialized to 0s
 uint8_t assignedCount = 0;
 
-/* old code
-uint8_t bottomNote = 12; //the bottom MIDI note, the module puts out 8 octaves.
-uint8_t topNote = bottomNote + 95;
-uint16_t pitchOut;
- */
-
-//uint8_t cc2out[] = {40, 41, 42, 1, 44, 45, 46, 47, 48, 49, 50, 51};
-/* old code
-void HandleControlChange (byte channel, byte number, byte value) {
-  //maybe use a CC to change drum trigger length
-}
- */
-
 // This function will be automatically called when a NoteOn is received.
 // It must be a void-returning function with the correct parameters,
 // see documentation ere:
