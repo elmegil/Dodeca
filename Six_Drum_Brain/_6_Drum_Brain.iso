@@ -1,0 +1,111 @@
+/*
+   Neutron magpie dodeca:
+   First 6 key values received get assigned sequentially to the first 6 trigger outs (odd side)
+   This allows you to plug in, hit each drum pad or key in sequence to assign them.
+   The even side outputs are gates, if the velocity of the hit exceeds some threshold (TBD)
+   a gate is generated.  Useful to provide "accent" with fixed size triggers.  Gate stays on until
+   the next time that key comes in below the threshold.
+
+   License CC-By-SA 4.0, Pete Hartman 3/2017
+ * */
+
+#include <MIDI.h>
+
+#define THRESHOLD 100
+
+uint8_t out2pin[] = {23, 22, 20, 21, 9, 10, 0, 25, 6, 5, 4, 3}; // output pins, "0" maps to A14
+                                                                // remapped to be 1 3 5 7 9 11 2 4 6 8 10 12
+uint8_t triggerTimer[6];
+uint8_t trigLength = 20; //this is how long the drum triggers are (in ms?)
+uint8_t keyList[128]; // fast way to assign keys to outputs, just index on the key number
+                      // sloppy code: assumed (correctly?) that it would be initialized to 0s
+uint8_t assignedCount = 0;
+
+/* old code
+uint8_t bottomNote = 12; //the bottom MIDI note, the module puts out 8 octaves.
+uint8_t topNote = bottomNote + 95;
+uint16_t pitchOut;
+ */
+
+//uint8_t cc2out[] = {40, 41, 42, 1, 44, 45, 46, 47, 48, 49, 50, 51};
+/* old code
+void HandleControlChange (byte channel, byte number, byte value) {
+  //maybe use a CC to change drum trigger length
+}
+ */
+
+// This function will be automatically called when a NoteOn is received.
+// It must be a void-returning function with the correct parameters,
+// see documentation ere:
+// http://arduinomidilib.sourceforge.net/class_m_i_d_i___class.html
+
+// ignore channel
+void HandleNoteOn(byte channel, byte key, byte velocity) {
+  uint8_t pin, gate;
+  if (velocity != 0) { // real note on
+    // deal with identification or assignment
+    if (((pin = keyList[key]) == 0) && (assignedCount < 6)) {
+      keyList[key] = ++assignedCount;
+      pin = assignedCount;
+    }
+    if (pin != 0) { // OK we have a valid output pin
+      // not checking out2pin[pin] for 0, because pin will always be 1-6, which are NOT 0
+      analogWrite(out2pin[pin-1], 127); // triggers always full value; using 7 bit resolution
+      if (velocity > THRESHOLD) {
+        gate = 127;
+      }
+      else gate = 0;
+      if (out2pin[pin+5]) {
+        analogWrite(out2pin[pin+5], gate);
+      }
+      else analogWrite(A14, gate);
+    }
+    triggerTimer[pin] = 0;
+  }
+  // Try to keep your callbacks short (no delays ect) as the contrary would slow down the loop()
+  // and have a bad impact on real-time performance.
+}
+void ISR_TRIGEND(void);
+
+IntervalTimer countdownTimer;
+
+void setup() {
+  // Initiate MIDI communications, listen to all channels
+
+  for (int i = 0; i < 12; i ++) {
+    if (out2pin[i]) {
+      pinMode(out2pin[i], OUTPUT);
+      analogWriteFrequency(out2pin[i], 375000);
+    }
+  }
+  analogWriteResolution(7);
+  //digitalWriteFast(4, HIGH);
+
+  for (int i = 0; i < 12; i ++) {
+    for (int j = 0; j < 128; j ++) {
+      if (out2pin[i] == 0) analogWrite(A14, (j ));
+      else analogWrite(out2pin[i], j );
+      delay(2);
+    }
+    // ??? shouldn't this be if / else?
+    if (out2pin[i] == 0) analogWrite(A14, 0);
+    analogWrite(out2pin[i], 0);
+  }
+
+  MIDI.begin(MIDI_CHANNEL_OMNI);
+  // Connect the HandleNoteOn function to the library, so it is called upon reception of a NoteOn.
+  MIDI.setHandleNoteOn(HandleNoteOn);  // Put only the name of the function
+  // MIDI.setHandleControlChange(HandleControlChange);
+
+  countdownTimer.begin(ISR_TRIGEND, 1000);
+
+  Serial.begin(9600);
+}
+
+
+void loop() {
+  // Call MIDI.read the fastest you can for real-time performance.
+  MIDI.read();
+
+  // There is no need to check if there are messages incoming if they are bound to a Callback function.
+}
