@@ -12,6 +12,9 @@
 #include <MIDI.h>
 
 #define THRESHOLD 100
+#define BOUNCETIME 25
+
+#define PINWRITE(x,y) (out2pin[x] ?  analogWrite(out2pin[x], y) : analogWrite(A14, y))
 
 uint8_t out2pin[] = {23, 22, 20, 21, 9, 10, 0, 25, 6, 5, 4, 3}; // output pins, "0" maps to A14
                                                                 // remapped to be 1 3 5 7 9 11 2 4 6 8 10 12
@@ -42,12 +45,9 @@ void HandleNoteOn(byte channel, byte key, byte velocity) {
         gate = 127;
       }
       else gate = 0;
-      if (out2pin[pin+5]) {
-        analogWrite(out2pin[pin+5], gate);
-      }
-      else analogWrite(A14, gate);
+      PINWRITE(pin+5, gate);
     }
-    triggerTimer[pin] = 0;
+    triggerTimer[pin-1] = 0;
   }
   // Try to keep your callbacks short (no delays ect) as the contrary would slow down the loop()
   // and have a bad impact on real-time performance.
@@ -57,33 +57,31 @@ void ISR_TRIGEND(void);
 IntervalTimer countdownTimer;
 
 void setup() {
-  // Initiate MIDI communications, listen to all channels
-
   for (int i = 0; i < 12; i ++) {
     if (out2pin[i]) {
       pinMode(out2pin[i], OUTPUT);
       analogWriteFrequency(out2pin[i], 375000);
     }
   }
+  pinMode(A14, OUTPUT);
+  analogWriteFrequency(A14, 375000);
+  
   analogWriteResolution(7);
   //digitalWriteFast(4, HIGH);
 
   for (int i = 0; i < 12; i ++) {
     for (int j = 0; j < 128; j ++) {
-      if (out2pin[i] == 0) analogWrite(A14, (j ));
-      else analogWrite(out2pin[i], j );
+      PINWRITE(i, j);
       delay(2);
     }
-    // ??? shouldn't this be if / else?
-    if (out2pin[i] == 0) analogWrite(A14, 0);
-    analogWrite(out2pin[i], 0);
+    PINWRITE(i, 0);
   }
-
+  
+  // Initiate MIDI communications, listen to all channels
   MIDI.begin(MIDI_CHANNEL_OMNI);
-  // Connect the HandleNoteOn function to the library, so it is called upon reception of a NoteOn.
+  // Connect the HandleNoteOn function to the library, so it is called upon receipt of a NoteOn.
   MIDI.setHandleNoteOn(HandleNoteOn);  // Put only the name of the function
-  // MIDI.setHandleControlChange(HandleControlChange);
-
+ 
   countdownTimer.begin(ISR_TRIGEND, 1000);
 
   Serial.begin(9600);
