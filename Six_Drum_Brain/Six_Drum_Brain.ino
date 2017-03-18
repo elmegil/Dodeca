@@ -12,14 +12,17 @@
 #include <MIDI.h>
 
 #define THRESHOLD 100
-#define BOUNCETIME 25
+#define BOUNCETIME 20
+#define TRIGLENGTH 20
 
 #define PINWRITE(x,y) (out2pin[x] ?  analogWrite(out2pin[x], y) : analogWrite(A14, y))
 
 uint8_t out2pin[] = {23, 22, 20, 21, 9, 10, 0, 25, 6, 5, 4, 3}; // output pins, "0" maps to A14
                                                                 // remapped to be 1 3 5 7 9 11 2 4 6 8 10 12
 uint8_t triggerTimer[6];
-uint8_t trigLength = 20; //this is how long the drum triggers are (in ms?)
+uint8_t debounceTimer[6];
+bool    debounceReady[6];
+//uint8_t trigLength = 20; //this is how long the drum triggers are (in ms?)
 uint8_t keyList[128]; // fast way to assign keys to outputs, just index on the key number
                       // sloppy code: assumed (correctly?) that it would be initialized to 0s
 uint8_t assignedCount = 0;
@@ -38,7 +41,7 @@ void HandleNoteOn(byte channel, byte key, byte velocity) {
       keyList[key] = ++assignedCount;
       pin = assignedCount;
     }
-    if (pin != 0) { // OK we have a valid output pin
+    if ((pin != 0) && debounceReady[pin-1]) { // OK we have a valid output pin, armed to fire
       // not checking out2pin[pin] for 0, because pin will always be 1-6, which are NOT 0
       analogWrite(out2pin[pin-1], 127); // triggers always full value; using 7 bit resolution
       if (velocity > THRESHOLD) {
@@ -46,8 +49,10 @@ void HandleNoteOn(byte channel, byte key, byte velocity) {
       }
       else gate = 0;
       PINWRITE(pin+5, gate);
+      triggerTimer[pin-1] = 0;
+      debounceTimer[pin-1] = 0;
+      debounceReady[pin-1] = false;
     }
-    triggerTimer[pin-1] = 0;
   }
   // Try to keep your callbacks short (no delays ect) as the contrary would slow down the loop()
   // and have a bad impact on real-time performance.
@@ -65,9 +70,13 @@ void setup() {
   }
   pinMode(A14, OUTPUT);
   analogWriteFrequency(A14, 375000);
-  
   analogWriteResolution(7);
-  //digitalWriteFast(4, HIGH);
+
+  // setup for debounce
+  for (int i = 0; i < 6; i ++) {
+    debounceTimer[i] = 0;
+    debounceReady[i] = true;
+  }
 
   for (int i = 0; i < 12; i ++) {
     for (int j = 0; j < 128; j ++) {
